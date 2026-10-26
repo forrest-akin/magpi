@@ -16,7 +16,8 @@ const fakeCtx = (
   {
     cancelled = false,
     onSwitch = async () => {},
-  }: { cancelled?: boolean; onSwitch?: () => Promise<void> } = {},
+    sessionFile,
+  }: { cancelled?: boolean; onSwitch?: () => Promise<void>; sessionFile?: string } = {},
 ) => {
   const notices: { message: string; level?: string }[] = [];
   const switches: string[] = [];
@@ -30,6 +31,7 @@ const fakeCtx = (
   });
   const ctx = {
     cwd,
+    sessionManager: { getSessionFile: () => sessionFile },
     ...notifier(() => switches.length > 0 && !cancelled),
     switchSession: async (
       path: string,
@@ -145,6 +147,22 @@ test('a cancelled switch leaves the unit created and warns through the first ctx
   ]);
 });
 
+test('a cancelled resume warns naming the unit and leaves work.json unchanged', async () => {
+  const root = await tempRepo('feat/x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  const file = join(root, '.magpi/work/feat-x/work.json');
+  const before = await readFile(file, 'utf8');
+  const { ctx, notices, switches } = fakeCtx(root, { cancelled: true });
+
+  await shape('', ctx);
+
+  expect(switches).toHaveLength(1);
+  expect(await readFile(file, 'utf8')).toBe(before);
+  expect(notices).toEqual([
+    { message: "Switch to work unit feat-x's session cancelled.", level: 'warning' },
+  ]);
+});
+
 test('a failed work.json write after the switch notifies WriteFailed in the new session', async () => {
   const root = await tempRepo('feat/x');
   const dir = join(root, '.magpi/work/feat-x');
@@ -205,19 +223,23 @@ test('--branch naming a tracked file is CheckoutFailed and keeps its edits', asy
   expect(notices).toEqual([{ message: 'fatal: invalid reference: README.md', level: 'error' }]);
 });
 
-test('--branch on a shaping work unit checks it out and reports it, work.json untouched', async () => {
+test('--branch on a shaping work unit checks it out and resumes it, work.json untouched', async () => {
   const root = await tempRepo('feat/x');
   const workJson = join(root, '.magpi/work/feat-x/work.json');
-  await shape('--branch feat/x', fakeCtx(root).ctx);
+  const first = fakeCtx(root);
+  await shape('--branch feat/x', first.ctx);
   const before = await readFile(workJson, 'utf8');
   git(root, 'checkout', '--quiet', 'main');
-  const { ctx, notices } = fakeCtx(root);
+  const { ctx, notices, switches } = fakeCtx(root);
 
   await shape('--branch feat/x', ctx);
 
   expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('feat/x');
   expect(await readFile(workJson, 'utf8')).toBe(before);
-  expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
+  expect(switches).toEqual(first.switches);
+  expect(notices).toEqual([
+    { message: 'Resumed work unit feat-x (shaping, explore).', level: 'info' },
+  ]);
 });
 
 test('an unexpected failure throws naming the operation and its cause', async () => {
@@ -232,13 +254,15 @@ test('an unexpected failure throws naming the operation and its cause', async ()
   expect(notices).toEqual([]);
 });
 
-test('no args report the work unit on the current branch', async () => {
+test("no args in the unit's last session report it without a switch", async () => {
   const root = await tempRepo('feat/x');
-  await shape('--branch feat/x', fakeCtx(root).ctx);
-  const { ctx, notices } = fakeCtx(root);
+  const first = fakeCtx(root);
+  await shape('--branch feat/x', first.ctx);
+  const { ctx, notices, switches } = fakeCtx(root, { sessionFile: first.switches[0] });
 
   await shape('', ctx);
 
+  expect(switches).toEqual([]);
   expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
 });
 
@@ -386,12 +410,111 @@ test("--branch when <slug> and <slug>-<crc> hold other branches' units is SlugTa
 test('no args find the current branch unit at <slug>-<crc>', async () => {
   const root = await tempRepo('feat/x', 'feat-x');
   await shape('--branch feat/x', fakeCtx(root).ctx);
-  await shape('--branch feat-x', fakeCtx(root).ctx);
-  const { ctx, notices } = fakeCtx(root);
+  const second = fakeCtx(root);
+  await shape('--branch feat-x', second.ctx);
+  const { ctx, notices } = fakeCtx(root, { sessionFile: second.switches[0] });
 
   await shape('', ctx);
 
   expect(notices).toEqual([
     { message: 'Work unit feat-x-902b: shaping (explore).', level: 'info' },
+  ]);
+});
+
+test('no args on a shaping unit resume its last session file by name, work.json untouched', async () => {
+  const root = await tempRepo('feat/x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  const dir = join(root, '.magpi/work/feat-x');
+  const late = join(dir, 'sessions/2999-01-01T00-00-00-000Z_late.jsonl');
+  await writeFile(late, '');
+  await writeFile(join(dir, 'sessions/2000-01-01T00-00-00-000Z_early.jsonl'), '');
+  const before = await readFile(join(dir, 'work.json'), 'utf8');
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(switches).toEqual([late]);
+  expect(await readFile(join(dir, 'work.json'), 'utf8')).toBe(before);
+  expect(notices).toEqual([
+    { message: 'Resumed work unit feat-x (shaping, explore).', level: 'info' },
+  ]);
+});
+
+test('no args on a shaping unit with an empty sessions dir start a new session file', async () => {
+  const root = await tempRepo('feat/x');
+  git(root, 'checkout', '--quiet', 'feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  const createdAt = '2026-01-01T00:00:00.000Z';
+  const created = newWorkUnit({ slug: 'feat-x' as Slug, branch: 'feat/x', now: createdAt });
+  const shaping = {
+    ...created,
+    state: 'shaping',
+    phase: 'explore',
+    sessionFiles: ['sessions/a.jsonl'],
+  };
+  await mkdir(join(dir, 'sessions'), { recursive: true });
+  await writeFile(join(dir, 'work.json'), JSON.stringify(shaping));
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  const names = await readdir(join(dir, 'sessions'));
+  expect(names).toHaveLength(1);
+  expect(switches).toEqual(names.map((name) => join(dir, 'sessions', name)));
+  const record = JSON.parse(await readFile(join(dir, 'work.json'), 'utf8'));
+  expect(record).toMatchObject({
+    state: 'shaping',
+    phase: 'explore',
+    sessionFiles: ['sessions/a.jsonl', ...names.map((name) => `sessions/${name}`)],
+    createdAt,
+  });
+  expect(record.updatedAt).not.toBe(createdAt);
+  expect(notices).toEqual([
+    { message: 'Resumed work unit feat-x (shaping, explore).', level: 'info' },
+  ]);
+});
+
+test('no args on a shaping unit without a sessions dir start a new session file', async () => {
+  const root = await tempRepo('feat/x');
+  git(root, 'checkout', '--quiet', 'feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  const created = newWorkUnit({
+    slug: 'feat-x' as Slug,
+    branch: 'feat/x',
+    now: '2026-01-01T00:00:00.000Z',
+  });
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'work.json'),
+    JSON.stringify({ ...created, state: 'shaping', phase: 'explore' }),
+  );
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  const names = await readdir(join(dir, 'sessions'));
+  expect(names).toHaveLength(1);
+  expect(switches).toEqual(names.map((name) => join(dir, 'sessions', name)));
+  expect(notices).toEqual([
+    { message: 'Resumed work unit feat-x (shaping, explore).', level: 'info' },
+  ]);
+});
+
+test("no args on a shaping unit resume a file holding only pi's session header", async () => {
+  const root = await tempRepo('feat/x');
+  const first = fakeCtx(root);
+  await shape('--branch feat/x', first.ctx);
+  const [sessionPath = ''] = first.switches;
+  await writeFile(
+    sessionPath,
+    '{"type":"session","version":3,"id":"x","timestamp":"t","cwd":"c"}\n',
+  );
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(switches).toEqual([sessionPath]);
+  expect(notices).toEqual([
+    { message: 'Resumed work unit feat-x (shaping, explore).', level: 'info' },
   ]);
 });

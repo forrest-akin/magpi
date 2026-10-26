@@ -28,7 +28,14 @@ magpi is a pi package and runs inside pi ([ADR 0003](docs/adrs/0003-magpi-runs-i
 pi -e <path to magpi>
 ```
 
-In a git repository, `/shape --branch <branch>` checks out an existing branch and creates its work unit at `.magpi/work/<slug>/work.json`, or reports the unit the branch already has. `/shape` with no arguments does the same for the work unit on the current branch. When the unit has not started shaping, either form also moves the conversation into a new session file in `.magpi/work/<slug>/sessions/` and the unit starts shaping; from then on, in that pi process, `/new` starts sessions in that folder and `/resume` lists only that unit's sessions. It never overwrites an existing work unit. A unit folder without `work.json` is refused and left for you to restore or remove. Other arguments print the usage.
+In a git repository:
+
+- `/shape --branch <branch>` checks out an existing branch and works on its unit, creating it at `.magpi/work/<slug>/work.json` when the branch has none. It never overwrites an existing work unit.
+- `/shape` with no arguments works on the unit of the current branch.
+- On a unit that has not started shaping, either form moves the conversation into a new session file in `.magpi/work/<slug>/sessions/` and the unit starts shaping. From then on, in that pi process, `/new` starts sessions in that folder and `/resume` lists only that unit's sessions.
+- On a shaping unit, either form resumes the last session file in `sessions/` by name, or starts a new one there when it has none. When pi is already in that session, it reports the unit. After pi restarts, `/resume` does not list the unit's sessions; `/shape` is the way back.
+- A unit folder without `work.json` is refused and left for you to restore or remove.
+- Other arguments print the usage.
 
 ## Layout
 

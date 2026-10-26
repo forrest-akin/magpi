@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import * as result from 'true-myth/result';
 import type Task from 'true-myth/task';
@@ -47,12 +47,28 @@ export const writeWorkUnit = (root: string, record: WorkUnitRecord): Task<void, 
   );
 };
 
+export const sessionsDir = (root: string, slug: string): string =>
+  join(unitDir(root, slug), 'sessions');
+
+export const listSessionFiles = (
+  root: string,
+  slug: string,
+): Task<readonly string[], ShapeFailure> =>
+  task.tryOrElse(
+    (cause): ShapeFailure => ({ kind: 'Unexpected', operation: 'listSessionFiles', cause }),
+    () =>
+      readdir(sessionsDir(root, slug)).catch((cause: unknown) => {
+        if (errnoOf(cause) === 'ENOENT') return [];
+        throw cause;
+      }),
+  );
+
 export const createSessionFile = (
   root: string,
   slug: string,
   name: string,
 ): Task<string, ShapeFailure> => {
-  const dir = join(unitDir(root, slug), 'sessions');
+  const dir = sessionsDir(root, slug);
   const file = join(dir, name);
   return task.tryOrElse(
     (cause) => writeFailed(file, cause),

@@ -1,3 +1,4 @@
+import Maybe from 'true-myth/maybe';
 import type { Result } from 'true-myth/result';
 import * as z from 'zod';
 import { type ParseError, parserFor } from '../parse';
@@ -66,6 +67,14 @@ export const startShaping = (
 
 export const sessionFileName = (nowIso: string, uuid: string): string =>
   `${nowIso.replace(/[:.]/g, '-')}_${uuid}.jsonl`;
+
+export const lastSessionFile = (names: readonly string[]): Maybe<string> =>
+  Maybe.of(
+    names
+      .filter((name) => name.endsWith('.jsonl'))
+      .sort()
+      .at(-1),
+  );
 
 const workUnitSchema = z.object({
   slug: z.string().transform((slug) => slug as Slug),

@@ -344,7 +344,7 @@ On startup of any `/shape`, `/craft`, or `/reflect` command, the harness reads `
 
 | `work.json` state on startup | Recovery action |
 |---|---|
-| `shaping` (any sub-phase) | Resume: the last session file in `sessions/` is the continuing session. |
+| `shaping` (any sub-phase) | Resume: `/shape` switches pi to the last `.jsonl` file in `sessions/` by name, the continuing session. With none there, or no `sessions/`, it starts a new session file in `sessions/` and adds it to `sessionFiles`. |
 | `plan-pending-gate` | No-op. The plan is already written. Display the plan; prompt human to invoke `/craft` or provide rejection feedback. |
 | `crafting` or `rework` | Resume: the craft was interrupted. Boot the Pi session. Log a note to the session context via `before_agent_start` that the previous session was interrupted and provide the last checkpoint git SHA (see §5). |
 | `awaiting-reflect` | No-op. Prompt human to invoke `/reflect` or close the work unit. |
@@ -721,7 +721,7 @@ Hook names are exactly as listed here. They are registered in the magpi extensio
 
 #### Session-dir redirect
 
-Inside pi, `/shape` moves the conversation into `.magpi/work/<slug>/sessions/`: it creates an empty `<ISO>_<uuid>.jsonl` there and calls `ctx.switchSession` on its absolute path, and Pi writes the session header and every later entry to that file. Pi's session dir is then the unit's `sessions/`, so later `newSession` calls and `/new` create their files there, and, in that pi process, `/resume` lists only that unit's sessions. magpi sets no `PI_CODING_AGENT_SESSION_DIR`, as it spawns no interactive pi ([ADR 0003](../adrs/0003-magpi-runs-inside-pi.md)). Evidence: [S1 spike](../spikes/2026-10-26-pi-switch-session.md).
+Inside pi, `/shape` moves the conversation into `.magpi/work/<slug>/sessions/`: it creates an empty `<ISO>_<uuid>.jsonl` there and calls `ctx.switchSession` on its absolute path, and Pi writes the session header and every later entry to that file. Pi's session dir is then the unit's `sessions/`, so later `newSession` calls and `/new` create their files there, and, in that pi process, `/resume` lists only that unit's sessions. After pi restarts, `/resume` does not list them; `/shape` on the unit is the way back, as it switches to the unit's last session file. magpi sets no `PI_CODING_AGENT_SESSION_DIR`, as it spawns no interactive pi ([ADR 0003](../adrs/0003-magpi-runs-inside-pi.md)). Evidence: [S1 spike](../spikes/2026-10-26-pi-switch-session.md).
 
 #### Headless subagent flags
 

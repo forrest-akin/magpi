@@ -28,6 +28,12 @@ export type Outcome =
       readonly state: WorkUnitRecord['state'];
       readonly phase: WorkUnitRecord['phase'];
     }
+  | {
+      readonly kind: 'Resumed';
+      readonly slug: string;
+      readonly state: WorkUnitRecord['state'];
+      readonly phase: WorkUnitRecord['phase'];
+    }
   | ShapeError;
 
 export type Notice = {
@@ -47,6 +53,11 @@ export const render = (outcome: Outcome): Notice => {
     case 'Status':
       return {
         message: `Work unit ${outcome.slug}: ${outcome.state} (${outcome.phase}).`,
+        level: 'info',
+      };
+    case 'Resumed':
+      return {
+        message: `Resumed work unit ${outcome.slug} (${outcome.state}, ${outcome.phase}).`,
         level: 'info',
       };
     case 'InvalidSlug':
