@@ -42,3 +42,7 @@ Foundations, if you want the reasoning: Rich Hickey's Simple Made Easy
 [functional core / ports-and-adapters](https://blog.ploeh.dk/2016/03/18/functional-architecture-is-ports-and-adapters/).
 A fuller annotated list lives in the `functional-error-handling` skill's
 `references/further-reading.md`.
+
+## Setup
+
+Install [mise](https://mise.jdx.dev), then `mise trust && mise install`. `mise.toml` pins Bun.
