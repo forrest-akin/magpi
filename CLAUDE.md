@@ -45,4 +45,4 @@ A fuller annotated list lives in the `functional-error-handling` skill's
 
 ## Setup
 
-Install [mise](https://mise.jdx.dev), then `mise trust && mise install`. `mise.toml` pins Bun.
+Setup is in [README.md](README.md).
