@@ -65,7 +65,11 @@ test('readWorkUnit with a work.json failing the schema is Corrupt with the first
   await createWorkUnit(root, record);
   await writeFile(file, JSON.stringify({ ...record, state: 'bogus' }));
   expect(await readWorkUnit(root, 'feat-x')).toEqual(
-    err({ kind: 'Corrupt', path: file, detail: 'state: Invalid input: expected "created"' }),
+    err({
+      kind: 'Corrupt',
+      path: file,
+      detail: 'state: Invalid option: expected one of "created"|"shaping"',
+    }),
   );
 });
 

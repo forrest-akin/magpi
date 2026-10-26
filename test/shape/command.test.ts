@@ -3,19 +3,46 @@ import { existsSync } from 'node:fs';
 import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { shape } from '../../src/shape/command';
+import { newWorkUnit } from '../../src/workunit/record';
+import type { Slug } from '../../src/workunit/slug';
 import { git, tempDir, tempRepo } from '../support/repo';
 
-const fakeCtx = (cwd: string) => {
+type Notifier = {
+  ui: { notify: (message: string, level?: 'info' | 'warning' | 'error') => void };
+};
+
+const fakeCtx = (
+  cwd: string,
+  {
+    cancelled = false,
+    onSwitch = async () => {},
+  }: { cancelled?: boolean; onSwitch?: () => Promise<void> } = {},
+) => {
   const notices: { message: string; level?: string }[] = [];
-  const ctx = {
-    cwd,
+  const switches: string[] = [];
+  const notifier = (stale: () => boolean): Notifier => ({
     ui: {
-      notify: (message: string, level?: 'info' | 'warning' | 'error') => {
+      notify: (message, level) => {
+        if (stale()) throw new Error('stale ctx: the session was replaced');
         notices.push({ message, level });
       },
     },
+  });
+  const ctx = {
+    cwd,
+    ...notifier(() => switches.length > 0 && !cancelled),
+    switchSession: async (
+      path: string,
+      { withSession }: { withSession: (ctx: Notifier) => Promise<void> },
+    ) => {
+      switches.push(path);
+      if (cancelled) return { cancelled: true };
+      await onSwitch();
+      await withSession(notifier(() => false));
+      return { cancelled: false };
+    },
   };
-  return { ctx, notices };
+  return { ctx, notices, switches };
 };
 
 test.each(['', 'anything else'])('args %p notify the usage at error', async (args) => {
@@ -24,17 +51,111 @@ test.each(['', 'anything else'])('args %p notify the usage at error', async (arg
   expect(notices).toEqual([{ message: 'Usage: /shape --branch <branch>', level: 'error' }]);
 });
 
-test('--branch checks the branch out and creates its work unit', async () => {
+test('--branch on a new unit switches into a new session file in its sessions dir', async () => {
   const root = await tempRepo('feat/x');
-  const { ctx, notices } = fakeCtx(root);
+  const { ctx, notices, switches } = fakeCtx(root);
 
   await shape('--branch feat/x', ctx);
 
   expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('feat/x');
+  const sessions = join(root, '.magpi/work/feat-x/sessions');
+  const names = await readdir(sessions);
+  expect(names).toHaveLength(1);
+  const name = names[0] ?? '';
+  expect(name).toMatch(/^\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z_[0-9a-f-]{36}\.jsonl$/);
+  expect(await readFile(join(sessions, name), 'utf8')).toBe('');
+  expect(switches).toEqual([join(sessions, name)]);
   const record = JSON.parse(await readFile(join(root, '.magpi/work/feat-x/work.json'), 'utf8'));
-  expect(record.state).toBe('created');
+  expect(record).toMatchObject({
+    state: 'shaping',
+    phase: 'explore',
+    sessionFiles: [`sessions/${name}`],
+  });
+  expect(record.updatedAt).toBe(record.createdAt);
   expect(notices).toEqual([
     { message: 'Work unit feat-x created on branch feat/x.', level: 'info' },
+  ]);
+});
+
+test('--branch on a created unit switches into a new session file and reports it', async () => {
+  const root = await tempRepo('feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  const createdAt = '2026-01-01T00:00:00.000Z';
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'work.json'),
+    JSON.stringify(newWorkUnit({ slug: 'feat-x' as Slug, branch: 'feat/x', now: createdAt })),
+  );
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('--branch feat/x', ctx);
+
+  const names = await readdir(join(dir, 'sessions'));
+  expect(names).toHaveLength(1);
+  expect(switches).toEqual(names.map((name) => join(dir, 'sessions', name)));
+  const record = JSON.parse(await readFile(join(dir, 'work.json'), 'utf8'));
+  expect(record).toMatchObject({
+    state: 'shaping',
+    phase: 'explore',
+    sessionFiles: names.map((name) => `sessions/${name}`),
+    createdAt,
+  });
+  expect(record.updatedAt).not.toBe(createdAt);
+  expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
+});
+
+test('no args on a created unit switch into a new session file and report it', async () => {
+  const root = await tempRepo('feat/x');
+  git(root, 'checkout', '--quiet', 'feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, 'work.json'),
+    JSON.stringify(
+      newWorkUnit({ slug: 'feat-x' as Slug, branch: 'feat/x', now: '2026-01-01T00:00:00.000Z' }),
+    ),
+  );
+  const { ctx, notices, switches } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  const names = await readdir(join(dir, 'sessions'));
+  expect(names).toHaveLength(1);
+  expect(switches).toEqual(names.map((name) => join(dir, 'sessions', name)));
+  const record = JSON.parse(await readFile(join(dir, 'work.json'), 'utf8'));
+  expect(record).toMatchObject({
+    state: 'shaping',
+    phase: 'explore',
+    sessionFiles: names.map((name) => `sessions/${name}`),
+  });
+  expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
+});
+
+test('a cancelled switch leaves the unit created and warns through the first ctx', async () => {
+  const root = await tempRepo('feat/x');
+  const { ctx, notices, switches } = fakeCtx(root, { cancelled: true });
+
+  await shape('--branch feat/x', ctx);
+
+  expect(switches).toHaveLength(1);
+  const record = JSON.parse(await readFile(join(root, '.magpi/work/feat-x/work.json'), 'utf8'));
+  expect(record).toMatchObject({ state: 'created', phase: 'none', sessionFiles: [] });
+  expect(notices).toEqual([
+    { message: "Switch to work unit feat-x's session cancelled.", level: 'warning' },
+  ]);
+});
+
+test('a failed work.json write after the switch notifies WriteFailed in the new session', async () => {
+  const root = await tempRepo('feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  const { ctx, notices, switches } = fakeCtx(root, { onSwitch: () => chmod(dir, 0o555) });
+
+  await shape('--branch feat/x', ctx);
+
+  expect(switches).toHaveLength(1);
+  expect(JSON.parse(await readFile(join(dir, 'work.json'), 'utf8')).state).toBe('created');
+  expect(notices).toEqual([
+    { message: `Could not write ${join(dir, 'work.json')}: EACCES`, level: 'error' },
   ]);
 });
 
@@ -84,7 +205,7 @@ test('--branch naming a tracked file is CheckoutFailed and keeps its edits', asy
   expect(notices).toEqual([{ message: 'fatal: invalid reference: README.md', level: 'error' }]);
 });
 
-test('--branch on an existing work unit checks it out and reports it, work.json untouched', async () => {
+test('--branch on a shaping work unit checks it out and reports it, work.json untouched', async () => {
   const root = await tempRepo('feat/x');
   const workJson = join(root, '.magpi/work/feat-x/work.json');
   await shape('--branch feat/x', fakeCtx(root).ctx);
@@ -96,7 +217,7 @@ test('--branch on an existing work unit checks it out and reports it, work.json 
 
   expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('feat/x');
   expect(await readFile(workJson, 'utf8')).toBe(before);
-  expect(notices).toEqual([{ message: 'Work unit feat-x: created (none).', level: 'info' }]);
+  expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
 });
 
 test('an unexpected failure throws naming the operation and its cause', async () => {
@@ -118,7 +239,7 @@ test('no args report the work unit on the current branch', async () => {
 
   await shape('', ctx);
 
-  expect(notices).toEqual([{ message: 'Work unit feat-x: created (none).', level: 'info' }]);
+  expect(notices).toEqual([{ message: 'Work unit feat-x: shaping (explore).', level: 'info' }]);
 });
 
 const unitOnFeatX = async (): Promise<{ root: string; workJson: string }> => {
@@ -138,7 +259,10 @@ test('--branch on a work.json failing the schema notifies Corrupt and leaves HEA
 
   expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
   expect(notices).toEqual([
-    { message: `${workJson} is corrupt: state: Invalid input: expected "created"`, level: 'error' },
+    {
+      message: `${workJson} is corrupt: state: Invalid option: expected one of "created"|"shaping"`,
+      level: 'error',
+    },
   ]);
 });
 
@@ -200,12 +324,13 @@ test('--branch on a unit folder without work.json notifies Orphaned and leaves i
   const dir = join(root, '.magpi/work/feat-x');
   await mkdir(dir, { recursive: true });
   await writeFile(join(dir, 'work.json.tmp'), '{');
-  const { ctx, notices } = fakeCtx(root);
+  const { ctx, notices, switches } = fakeCtx(root);
 
   await shape('--branch feat/x', ctx);
 
   expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
   expect(await readdir(dir)).toEqual(['work.json.tmp']);
+  expect(switches).toEqual([]);
   expect(notices).toEqual([
     {
       message: `Work unit folder ${dir} has no work.json; restore it or remove the folder.`,
@@ -266,5 +391,7 @@ test('no args find the current branch unit at <slug>-<crc>', async () => {
 
   await shape('', ctx);
 
-  expect(notices).toEqual([{ message: 'Work unit feat-x-902b: created (none).', level: 'info' }]);
+  expect(notices).toEqual([
+    { message: 'Work unit feat-x-902b: shaping (explore).', level: 'info' },
+  ]);
 });

@@ -41,8 +41,8 @@ Every piece of work lives under a single directory rooted at `.magpi/work/<slug>
       plan.md              # the approved plan artifact (written during plan sub-phase)
       critique-todos.json  # structured critique todo list (written during critique sub-phase)
       changeset.json       # distill-proposed changeset (written during distill sub-phase)
-      sessions/            # Pi JSONL transcripts, one file per launched session
-        <ISO>_<uuid>.jsonl # written natively by Pi via PI_CODING_AGENT_SESSION_DIR redirect
+      sessions/            # Pi JSONL transcripts, one file per session; /shape switches pi into this dir
+        <ISO>_<uuid>.jsonl # written natively by Pi after the switch
       briefs/
         explore-to-define.json    # handoff brief from explore → define
         define-to-plan.json       # handoff brief from define → plan
@@ -344,7 +344,7 @@ On startup of any `/shape`, `/craft`, or `/reflect` command, the harness reads `
 
 | `work.json` state on startup | Recovery action |
 |---|---|
-| `shaping` (any sub-phase) | Resume: boot the Pi session with the same `PI_CODING_AGENT_SESSION_DIR` redirect. The last session file in `sessions/` is the continuing session. |
+| `shaping` (any sub-phase) | Resume: the last session file in `sessions/` is the continuing session. |
 | `plan-pending-gate` | No-op. The plan is already written. Display the plan; prompt human to invoke `/craft` or provide rejection feedback. |
 | `crafting` or `rework` | Resume: the craft was interrupted. Boot the Pi session. Log a note to the session context via `before_agent_start` that the previous session was interrupted and provide the last checkpoint git SHA (see §5). |
 | `awaiting-reflect` | No-op. Prompt human to invoke `/reflect` or close the work unit. |
@@ -710,7 +710,7 @@ All Pi hook, SDK, and env-var names used by the harness are listed here with the
 
 | Hook name | When it fires | Magpi use |
 |---|---|---|
-| `session_start` | After session load, before first turn; carries `reason` and `previousSessionFile` | Inject the handoff brief for the incoming phase (read from `briefs/`); validate artifact paths; set `PI_CODING_AGENT_SESSION_DIR` context |
+| `session_start` | After session load, before first turn; carries `reason` and `previousSessionFile` | Inject the handoff brief for the incoming phase (read from `briefs/`); validate artifact paths |
 | `session_shutdown` | Before session teardown | Write the outgoing handoff brief to `briefs/`; advance `work.json` state; write craft checkpoint git SHA to `work.json` |
 | `before_agent_start` | Before the agent's first turn in a session | Prepend the handoff brief as a structured system-prompt block; inject model profile context |
 | `context` | Each turn, before the message array is sent to the model | Trim stale tool results; enforce the "lean active context" principle per §6.2 of `agent-harness-design.md`; drop entries the model no longer needs |
@@ -721,11 +721,7 @@ Hook names are exactly as listed here. They are registered in the magpi extensio
 
 #### Session-dir redirect
 
-```sh
-PI_CODING_AGENT_SESSION_DIR=".magpi/work/<slug>/sessions"
-```
-
-Set in the harness's process environment before spawning each phase's Pi session. The path must be an absolute path in practice (resolved via `path.resolve()` before setting). The CLI flag equivalent is `--session-dir <path>`.
+Inside pi, `/shape` moves the conversation into `.magpi/work/<slug>/sessions/`: it creates an empty `<ISO>_<uuid>.jsonl` there and calls `ctx.switchSession` on its absolute path, and Pi writes the session header and every later entry to that file. Pi's session dir is then the unit's `sessions/`, so later `newSession` calls and `/new` create their files there, and, in that pi process, `/resume` lists only that unit's sessions. magpi sets no `PI_CODING_AGENT_SESSION_DIR`, as it spawns no interactive pi ([ADR 0003](../adrs/0003-magpi-runs-inside-pi.md)). Evidence: [S1 spike](../spikes/2026-10-26-pi-switch-session.md).
 
 #### Headless subagent flags
 

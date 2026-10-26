@@ -9,7 +9,8 @@ export type ShapeError =
   | { readonly kind: 'WriteFailed'; readonly path: string; readonly code: string }
   | { readonly kind: 'Corrupt'; readonly path: string; readonly detail: string }
   | { readonly kind: 'SlugTaken'; readonly slug: string; readonly branch: string }
-  | { readonly kind: 'Orphaned'; readonly path: string };
+  | { readonly kind: 'Orphaned'; readonly path: string }
+  | { readonly kind: 'SwitchCancelled'; readonly slug: string };
 
 export type Unexpected = {
   readonly kind: 'Unexpected';
@@ -69,6 +70,11 @@ export const render = (outcome: Outcome): Notice => {
       return {
         message: `Work unit folder ${outcome.path} has no work.json; restore it or remove the folder.`,
         level: 'error',
+      };
+    case 'SwitchCancelled':
+      return {
+        message: `Switch to work unit ${outcome.slug}'s session cancelled.`,
+        level: 'warning',
       };
     default: {
       const unhandled: never = outcome;

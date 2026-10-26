@@ -39,6 +39,31 @@ export const createWorkUnit = (root: string, record: WorkUnitRecord): Task<void,
   );
 };
 
+export const writeWorkUnit = (root: string, record: WorkUnitRecord): Task<void, ShapeError> => {
+  const file = join(unitDir(root, record.slug), 'work.json');
+  return task.tryOrElse(
+    (cause) => writeFailed(file, cause),
+    () => replaceJson(file, record),
+  );
+};
+
+export const createSessionFile = (
+  root: string,
+  slug: string,
+  name: string,
+): Task<string, ShapeFailure> => {
+  const dir = join(unitDir(root, slug), 'sessions');
+  const file = join(dir, name);
+  return task.tryOrElse(
+    (cause) => writeFailed(file, cause),
+    async () => {
+      await mkdir(dir, { recursive: true });
+      await writeFile(file, '', { flag: 'wx' });
+      return file;
+    },
+  );
+};
+
 export type Lookup =
   | { readonly kind: 'Missing' }
   | { readonly kind: 'Orphaned' }

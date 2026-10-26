@@ -99,9 +99,9 @@ design (§6.3).
 > [Tech Spec: Workflow layer](specs/2026-06-07-workflow-layer-spec.md)
 > (work-unit folder schema, lifecycle state machine, gates, `/distill` + learnings ledger).
 > Key refinement from those records: the loop runs over a **branch-linked work-unit folder**
-> (`.magpi/work/<slug>/`) with Pi's session dir redirected into it
-> (`PI_CODING_AGENT_SESSION_DIR`), so transcripts land natively per work unit and seams hand
-> off under the hood (auto-clear-and-reseed) — no manual `/compact`.
+> (`.magpi/work/<slug>/`), with `/shape` switching pi into the unit's `sessions/`, so
+> transcripts land natively per work unit and seams hand off under the hood
+> (auto-clear-and-reseed) — no manual `/compact`.
 
 ## 5. Decisions so far
 
