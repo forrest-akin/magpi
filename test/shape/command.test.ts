@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { shape } from '../../src/shape/command';
 import { git, tempDir, tempRepo } from '../support/repo';
@@ -192,6 +192,43 @@ test("--branch whose slug holds another branch's unit creates it at <slug>-<crc>
   expect(record).toMatchObject({ slug: 'feat-x-902b', branch: 'feat-x' });
   expect(notices).toEqual([
     { message: 'Work unit feat-x-902b created on branch feat-x.', level: 'info' },
+  ]);
+});
+
+test('--branch on a unit folder without work.json notifies Orphaned and leaves it all', async () => {
+  const root = await tempRepo('feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, 'work.json.tmp'), '{');
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('--branch feat/x', ctx);
+
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+  expect(await readdir(dir)).toEqual(['work.json.tmp']);
+  expect(notices).toEqual([
+    {
+      message: `Work unit folder ${dir} has no work.json; restore it or remove the folder.`,
+      level: 'error',
+    },
+  ]);
+});
+
+test('no args on a unit folder without work.json notify Orphaned and leave it', async () => {
+  const root = await tempRepo('feat/x');
+  git(root, 'checkout', '--quiet', 'feat/x');
+  const dir = join(root, '.magpi/work/feat-x');
+  await mkdir(dir, { recursive: true });
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(await readdir(dir)).toEqual([]);
+  expect(notices).toEqual([
+    {
+      message: `Work unit folder ${dir} has no work.json; restore it or remove the folder.`,
+      level: 'error',
+    },
   ]);
 });
 

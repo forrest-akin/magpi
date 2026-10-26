@@ -4,7 +4,7 @@ import * as task from 'true-myth/task';
 import { checkout, currentBranch, repoRoot } from '../git';
 import { newWorkUnit, type WorkUnitRecord } from '../workunit/record';
 import { type Slug, slugFromBranch, suffixedSlug } from '../workunit/slug';
-import { createWorkUnit, type Lookup, readWorkUnit } from '../workunit/store';
+import { createWorkUnit, type Lookup, readWorkUnit, unitDir } from '../workunit/store';
 import { parseShapeArgs } from './args';
 import { type Outcome, render, type ShapeFailure } from './outcome';
 
@@ -19,6 +19,7 @@ const usage = (input: string): Task<Outcome, ShapeFailure> =>
 type Place =
   | { readonly kind: 'Mine'; readonly slug: Slug; readonly record: WorkUnitRecord }
   | { readonly kind: 'Missing'; readonly slug: Slug }
+  | { readonly kind: 'Orphaned'; readonly slug: Slug }
   | { readonly kind: 'Taken'; readonly slug: Slug; readonly branch: string };
 
 const placeAt = (slug: Slug, branch: string, lookup: Lookup): Place => {
@@ -44,6 +45,25 @@ const status = (slug: Slug, record: WorkUnitRecord): Outcome => ({
   phase: record.phase,
 });
 
+const orphaned = (root: string, slug: Slug): Task<Outcome, ShapeFailure> =>
+  task.reject({ kind: 'Orphaned', path: unitDir(root, slug) });
+
+const reportAt = (root: string, args: string, place: Place): Task<Outcome, ShapeFailure> => {
+  switch (place.kind) {
+    case 'Mine':
+      return task.resolve(status(place.slug, place.record));
+    case 'Orphaned':
+      return orphaned(root, place.slug);
+    case 'Missing':
+    case 'Taken':
+      return usage(args);
+    default: {
+      const unhandled: never = place;
+      return unhandled;
+    }
+  }
+};
+
 const report = (args: string, root: string): Task<Outcome, ShapeFailure> =>
   currentBranch(root).andThen((branch) =>
     branch.isNothing
@@ -51,11 +71,7 @@ const report = (args: string, root: string): Task<Outcome, ShapeFailure> =>
       : task
           .fromResult(slugFromBranch(branch.value))
           .andThen((slug) =>
-            locate(root, branch.value, slug).andThen((place) =>
-              place.kind === 'Mine'
-                ? task.resolve<Outcome, ShapeFailure>(status(place.slug, place.record))
-                : usage(args),
-            ),
+            locate(root, branch.value, slug).andThen((place) => reportAt(root, args, place)),
           ),
   );
 
@@ -72,6 +88,8 @@ const settle = (
       return checkout(root, branch)
         .andThen(() => createWorkUnit(root, newWorkUnit({ slug: place.slug, branch, now })))
         .map((): Outcome => ({ kind: 'Created', slug: place.slug, branch }));
+    case 'Orphaned':
+      return orphaned(root, place.slug);
     case 'Taken':
       return task.reject({ kind: 'SlugTaken', slug: place.slug, branch: place.branch });
     default: {

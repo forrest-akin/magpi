@@ -52,6 +52,13 @@ test('readWorkUnit with no unit folder is Missing', async () => {
   expect(await readWorkUnit(await tempDir(), 'feat-x')).toEqual(ok({ kind: 'Missing' }));
 });
 
+test('readWorkUnit with a unit folder but no work.json is Orphaned', async () => {
+  const root = await tempDir();
+  await mkdir(join(root, '.magpi/work/feat-x'), { recursive: true });
+  await writeFile(join(root, '.magpi/work/feat-x/work.json.tmp'), '{}');
+  expect(await readWorkUnit(root, 'feat-x')).toEqual(ok({ kind: 'Orphaned' }));
+});
+
 test('readWorkUnit with a work.json failing the schema is Corrupt with the first issue', async () => {
   const root = await tempDir();
   const file = join(root, '.magpi/work/feat-x/work.json');

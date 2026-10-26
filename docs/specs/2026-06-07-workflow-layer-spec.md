@@ -353,7 +353,7 @@ On startup of any `/shape`, `/craft`, or `/reflect` command, the harness reads `
 | `blocked` | Display `blockedReason`. Prompt human for resolution. |
 | `completed` / `abandoned` | No-op. Display status. |
 
-If `work.json` is absent but `.magpi/work/<slug>/` exists (partial folder, crash during `created` transition), the harness deletes the folder and treats the work unit as non-existent, logging a warning.
+If `work.json` is absent but `.magpi/work/<slug>/` exists (partial folder, crash during `created` transition), the harness refuses the work unit with an error naming the folder and changes nothing; the folder may hold session transcripts, so the user restores `work.json` or removes the folder.
 
 If `work.json.tmp` exists alongside `work.json`, the `.tmp` file is discarded (the rename did not complete; `work.json` is the last valid state).
 

@@ -28,6 +28,11 @@ test.each<[Outcome, string, Notice['level']]>([
     'error',
   ],
   [
+    { kind: 'Orphaned', path: '/r/.magpi/work/feat-x' },
+    'Work unit folder /r/.magpi/work/feat-x has no work.json; restore it or remove the folder.',
+    'error',
+  ],
+  [
     { kind: 'SlugTaken', slug: 'feat-x-a21d', branch: 'feat/y' },
     'Work unit feat-x-a21d belongs to branch feat/y; rename this branch to adopt it.',
     'error',
