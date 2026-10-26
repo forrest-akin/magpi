@@ -6,15 +6,20 @@ import { newWorkUnit, type WorkUnitRecord } from '../workunit/record';
 import { type Slug, slugFromBranch, suffixedSlug } from '../workunit/slug';
 import { createWorkUnit, type Lookup, readWorkUnit, unitDir } from '../workunit/store';
 import { parseShapeArgs } from './args';
-import { type Outcome, render, type ShapeFailure } from './outcome';
+import { type Outcome, render, type ShapeFailure, type Unexpected } from './outcome';
 
-export type ShapeContext = {
+type Notifier = { readonly ui: Pick<ExtensionCommandContext['ui'], 'notify'> };
+
+export type ShapeContext = Notifier & {
   readonly cwd: ExtensionCommandContext['cwd'];
-  readonly ui: Pick<ExtensionCommandContext['ui'], 'notify'>;
 };
 
-const usage = (input: string): Task<Outcome, ShapeFailure> =>
-  task.resolve({ kind: 'Usage', input });
+type Step = { readonly kind: 'Notify'; readonly outcome: Outcome };
+
+const notice = (outcome: Outcome): Step => ({ kind: 'Notify', outcome });
+
+const usage = (input: string): Task<Step, ShapeFailure> =>
+  task.resolve(notice({ kind: 'Usage', input }));
 
 type Place =
   | { readonly kind: 'Mine'; readonly slug: Slug; readonly record: WorkUnitRecord }
@@ -45,13 +50,13 @@ const status = (slug: Slug, record: WorkUnitRecord): Outcome => ({
   phase: record.phase,
 });
 
-const orphaned = (root: string, slug: Slug): Task<Outcome, ShapeFailure> =>
+const orphaned = (root: string, slug: Slug): Task<Step, ShapeFailure> =>
   task.reject({ kind: 'Orphaned', path: unitDir(root, slug) });
 
-const reportAt = (root: string, args: string, place: Place): Task<Outcome, ShapeFailure> => {
+const reportAt = (root: string, args: string, place: Place): Task<Step, ShapeFailure> => {
   switch (place.kind) {
     case 'Mine':
-      return task.resolve(status(place.slug, place.record));
+      return task.resolve(notice(status(place.slug, place.record)));
     case 'Orphaned':
       return orphaned(root, place.slug);
     case 'Missing':
@@ -64,7 +69,7 @@ const reportAt = (root: string, args: string, place: Place): Task<Outcome, Shape
   }
 };
 
-const report = (args: string, root: string): Task<Outcome, ShapeFailure> =>
+const report = (args: string, root: string): Task<Step, ShapeFailure> =>
   currentBranch(root).andThen((branch) =>
     branch.isNothing
       ? usage(args)
@@ -80,14 +85,14 @@ const settle = (
   branch: string,
   now: string,
   place: Place,
-): Task<Outcome, ShapeFailure> => {
+): Task<Step, ShapeFailure> => {
   switch (place.kind) {
     case 'Mine':
-      return checkout(root, branch).map(() => status(place.slug, place.record));
+      return checkout(root, branch).map(() => notice(status(place.slug, place.record)));
     case 'Missing':
       return checkout(root, branch)
         .andThen(() => createWorkUnit(root, newWorkUnit({ slug: place.slug, branch, now })))
-        .map((): Outcome => ({ kind: 'Created', slug: place.slug, branch }));
+        .map(() => notice({ kind: 'Created', slug: place.slug, branch }));
     case 'Orphaned':
       return orphaned(root, place.slug);
     case 'Taken':
@@ -99,13 +104,13 @@ const settle = (
   }
 };
 
-const adopt = (root: string, branch: string, now: string): Task<Outcome, ShapeFailure> =>
+const adopt = (root: string, branch: string, now: string): Task<Step, ShapeFailure> =>
   task
     .fromResult(slugFromBranch(branch))
     .andThen((slug) => locate(root, branch, slug))
     .andThen((place) => settle(root, branch, now, place));
 
-const run = (args: string, cwd: string, now: string): Task<Outcome, ShapeFailure> =>
+const plan = (args: string, cwd: string, now: string): Task<Step, ShapeFailure> =>
   task
     .fromResult(parseShapeArgs(args))
     .andThen((request) =>
@@ -114,18 +119,20 @@ const run = (args: string, cwd: string, now: string): Task<Outcome, ShapeFailure
       ),
     );
 
-export const shape = async (args: string, ctx: ShapeContext): Promise<void> => {
-  const outcome = (await run(args, ctx.cwd, new Date().toISOString())).match({
-    Ok: (outcome) => outcome,
-    Err: (failure) => {
-      if (failure.kind === 'Unexpected') {
-        const cause = failure.cause;
-        const message = cause instanceof Error ? cause.message : String(cause);
-        throw new Error(`/shape: ${failure.operation}: ${message}`, { cause });
-      }
-      return failure;
-    },
-  });
+const notify = (ctx: Notifier, outcome: Outcome): void => {
   const { message, level } = render(outcome);
   ctx.ui.notify(message, level);
+};
+
+const raise = ({ operation, cause }: Unexpected): never => {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  throw new Error(`/shape: ${operation}: ${message}`, { cause });
+};
+
+export const shape = async (args: string, ctx: ShapeContext): Promise<void> => {
+  const result = await plan(args, ctx.cwd, new Date().toISOString());
+  result.match({
+    Ok: (step) => notify(ctx, step.outcome),
+    Err: (failure) => (failure.kind === 'Unexpected' ? raise(failure) : notify(ctx, failure)),
+  });
 };

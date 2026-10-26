@@ -4,13 +4,24 @@ import * as result from 'true-myth/result';
 import type Task from 'true-myth/task';
 import * as task from 'true-myth/task';
 import type { ParseError } from '../parse';
-import type { ShapeFailure } from '../shape/outcome';
+import type { ShapeError, ShapeFailure } from '../shape/outcome';
 import { parseWorkUnit, type WorkUnitRecord } from './record';
 
 const errnoOf = (cause: unknown): unknown =>
   typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
 
 export const unitDir = (root: string, slug: string): string => join(root, '.magpi/work', slug);
+
+const writeFailed = (path: string, cause: unknown): ShapeError => ({
+  kind: 'WriteFailed',
+  path,
+  code: String(errnoOf(cause)),
+});
+
+const replaceJson = async (file: string, record: WorkUnitRecord): Promise<void> => {
+  await writeFile(`${file}.tmp`, `${JSON.stringify(record, null, 2)}\n`);
+  await rename(`${file}.tmp`, file);
+};
 
 export const createWorkUnit = (root: string, record: WorkUnitRecord): Task<void, ShapeFailure> => {
   const dir = unitDir(root, record.slug);
@@ -19,12 +30,11 @@ export const createWorkUnit = (root: string, record: WorkUnitRecord): Task<void,
     (cause): ShapeFailure =>
       errnoOf(cause) === 'EEXIST'
         ? { kind: 'AlreadyExists', slug: record.slug }
-        : { kind: 'WriteFailed', path: file, code: String(errnoOf(cause)) },
+        : writeFailed(file, cause),
     async () => {
       await mkdir(dirname(dir), { recursive: true });
       await mkdir(dir);
-      await writeFile(`${file}.tmp`, `${JSON.stringify(record, null, 2)}\n`);
-      await rename(`${file}.tmp`, file);
+      await replaceJson(file, record);
     },
   );
 };
