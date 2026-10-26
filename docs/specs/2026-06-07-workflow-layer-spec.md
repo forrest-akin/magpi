@@ -113,7 +113,7 @@ type WorkUnitPhase =
   | "craft"
   | "critique"
   | "distill"
-  | "none";   // terminal states
+  | "none";   // no active sub-phase: `created` and terminal states
 
 type BriefName =
   | "explore-to-define"
@@ -381,8 +381,8 @@ The slug algorithm is deterministic given the same input. The harness is the sou
 
 `/shape --branch <existing-branch>` skips slug derivation and branch creation:
 
-1. The harness checks out `<existing-branch>`.
-2. The slug is derived from the branch name itself: apply the same kebab-case normalization, but skip the crc suffix if the name is already unique within `.magpi/work/`.
+1. The slug is derived from the branch name itself: apply the same kebab-case normalization, but skip the crc suffix if the name is already unique within `.magpi/work/`.
+2. The harness checks out `<existing-branch>`.
 3. If `.magpi/work/<derived-slug>/` already exists and has a `work.json`, the harness treats this as **resume** (see below). Otherwise it creates a fresh work unit.
 
 #### Resume behavior: `/shape` on a branch that already has a work unit

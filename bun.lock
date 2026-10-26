@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "magpi",
+      "dependencies": {
+        "true-myth": "^9",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.5.4",
         "@earendil-works/pi-coding-agent": "0.80.7",
@@ -280,6 +283,8 @@
     "shebang-regex": ["shebang-regex@3.0.0", "", {}, "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A=="],
 
     "signal-exit": ["signal-exit@3.0.7", "", {}, "sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ=="],
+
+    "true-myth": ["true-myth@9.4.0", "", {}, "sha512-NQP/xMI25jtwk7mDBgA0VS+xdVWUqDaxrTofvx1gfhc5PQwMyA1V39oERLvPrCbI3+6S29fIkivy2ZXdzNY3kQ=="],
 
     "ts-algebra": ["ts-algebra@2.0.0", "", {}, "sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw=="],
 
