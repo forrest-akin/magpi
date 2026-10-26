@@ -742,12 +742,16 @@ These are the exact flags from `@earendil-works/pi-coding-agent` `cli/args.ts`. 
 #### Exported loader
 
 ```ts
-import { loadEntriesFromFile } from "@earendil-works/pi-coding-agent";
+// Pi 0.80.7 does not re-export `loadEntriesFromFile` from the package root.
+// Read the file bytes, then parse + migrate with the exported parser:
+import { parseSessionEntries, migrateSessionEntries } from "@earendil-works/pi-coding-agent";
 ```
 
-Used by all distill workers. `loadEntriesFromFile(filePath: string): FileEntry[]` returns the parsed and migrated entries for a session file, handling `CURRENT_SESSION_VERSION` migration automatically. Never hand-parse the JSONL; always use this loader to remain compatible with future schema versions.
+Used by all distill workers. `parseSessionEntries(content: string): FileEntry[]` returns the parsed, migration-aware entries for a session file's contents; `migrateSessionEntries` handles `CURRENT_SESSION_VERSION` migration. Never hand-parse the JSONL; always go through this parser to remain compatible with future schema versions.
 
-Also available: `getLatestCompactionEntry(entries: FileEntry[])` for CompactionEntry detection; `parseSessionEntries(content: string): FileEntry[]` for in-memory parsing if needed.
+Also available: `getLatestCompactionEntry(entries: FileEntry[])` for CompactionEntry detection.
+
+> **Implementation note — verified against the pinned Pi 0.80.7, 2026-07-16 (evidence: `test/_evidence/gate-bun-pi-go-no-go.json`).** Pi 0.80.7 exports no root-level `loadEntriesFromFile`; the public loader surface is `parseSessionEntries` / `migrateSessionEntries` / `getLatestCompactionEntry`. In an extension command, `ctx.newSession({ setup, withSession })` starts a replacement session in the current session dir and `ctx.switchSession(path)` opens a session file in that file's directory. Outside an extension, sessions start with `SessionManager.create(cwd, sessionDir)` or `createAgentSession(...)`. References to `loadEntriesFromFile` elsewhere in this spec read through this note.
 
 #### SDK headless path (fallback for in-process subagents)
 
@@ -820,7 +824,7 @@ await session.prompt("<worker task prompt>");
 4. After 2+ work units are completed, `/distill` on a work unit that exhibits a recurring friction produces a `changeset.json` with at least one item with `recurrenceCount >= 2`. Verified by checking `ledger.jsonl` entries.
 5. A gate-rejected plan retries at most twice before `/shape` reverts to `shaping (define)` state. Verified by checking `work.json.retryCount` and state after two rejections.
 6. Partial changeset accept/reject at Gate 3 results in: accepted items applied, rejected items in `ledger.jsonl` with `status: "rejected"`, and `work.json.state == "completed"`. Verified by end-to-end test.
-7. `loadEntriesFromFile` is the only mechanism used to read Pi JSONL transcripts in the distill workers (no hand-parsing). Verified by code review: no `JSON.parse` calls on `.jsonl` file content outside of `loadEntriesFromFile`.
+7. Pi's exported parser (`parseSessionEntries`/`migrateSessionEntries`) is the only mechanism used to read Pi JSONL transcripts in the distill workers (no hand-parsing). Verified by code review: no `JSON.parse` calls on `.jsonl` file content outside that parser.
 8. All six Pi extension hooks (`session_start`, `session_shutdown`, `before_agent_start`, `context`, `session_before_compact`, `tool_call`) are registered in the magpi extension module and fire without error on a standard `/craft` run. Verified by a test session with hook-call logging enabled.
 
 ## Determination

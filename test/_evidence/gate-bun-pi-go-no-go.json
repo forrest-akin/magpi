@@ -1,0 +1,65 @@
+{
+  "id": "gate-bun-pi-go-no-go",
+  "schema": "evidence/v0-provisional",
+  "task": 1,
+  "commit": 1,
+  "recordedAt": "2026-07-16",
+  "kind": "spike-probe",
+  "question": "Does @earendil-works/pi-coding-agent import cleanly under Bun, and does a real Pi session natively write its JSONL transcript into a redirected session dir (no copy/symlink shim)?",
+  "outcome": "pass",
+  "decision": "proceed-on-bun",
+  "fallbackTaken": false,
+  "environment": {
+    "platform": "darwin-arm64",
+    "runtimeManager": "mise",
+    "bun": "1.3.14",
+    "node": "24.18.0",
+    "pi": "0.80.7",
+    "typescript": "5.9.3",
+    "zod": "4.4.3",
+    "trueMyth": "9.4.0",
+    "fastCheck": "4.9.0",
+    "biome": "2.5.4",
+    "typesBun": "1.3.14"
+  },
+  "checks": [
+    {
+      "name": "pi-imports-under-bun",
+      "passed": true,
+      "detail": "`import * as pi from '@earendil-works/pi-coding-agent'` under Bun 1.3.14 yielded 144 named exports with no import-time error. The 2 blocked postinstalls (protobufjs, @google/genai) are transitive AI-provider scripts and are not needed to import Pi."
+    },
+    {
+      "name": "native-transcript-capture-to-redirected-dir",
+      "passed": true,
+      "detail": "SessionManager.create(cwd, sessionDir) targeted an absolute redirected dir (usesDefaultSessionDir=false). After a synthetic user+assistant exchange, Pi natively wrote <ISO>_<uuidv7>.jsonl at exactly getSessionFile(): isFile=true, isSymbolicLink=false, 3 entries [session, message(user), message(assistant)]. Read back through the public parseSessionEntries loader -> 3 entries. No copy or symlink involved."
+    },
+    {
+      "name": "session-dir-redirect-documented",
+      "passed": true,
+      "detail": "`pi --help` documents `--session-dir <dir>` and env var `PI_CODING_AGENT_SESSION_DIR` (\"overridden by --session-dir\"). Env var is built at runtime as `${APP_NAME.toUpperCase()}_CODING_AGENT_SESSION_DIR`, which is why it is not a string literal in dist."
+    }
+  ],
+  "apiSurfaceFindings": [
+    {
+      "topic": "transcript-loader",
+      "finding": "loadEntriesFromFile is NOT a public export in 0.80.7 (it exists internally). Public loader surface: parseSessionEntries(content: string): FileEntry[], migrateSessionEntries(...), getLatestCompactionEntry(entries). SC #7 (\"loader-only JSONL reads, no hand JSON.parse\") maps to: read the file bytes then use parseSessionEntries/migrateSessionEntries — never JSON.parse a .jsonl directly.",
+      "affects": "Task 5 (pi-transcript-reader adapter), SC #7 scan"
+    },
+    {
+      "topic": "session-creation",
+      "finding": "newSession({withSession}) is NOT a top-level export. Session creation is SessionManager.create(cwd, sessionDir, {id}) (+ instance newSession(options)), or the higher-level createAgentSession(...)/createAgentSessionFromServices(...). SessionManager statics: create, open, continueRecent, inMemory, forkFrom, list, listAll.",
+      "affects": "Task 5 (pi-session-launcher), Task 15 (handoff reseed)"
+    },
+    {
+      "topic": "lazy-persistence",
+      "finding": "SessionManager buffers entries in memory and only writes the .jsonl on the first assistant message (_persist gates on hasAssistant; opens with 'wx' then append-only). A crashed session with no assistant response yet leaves NO file on disk. Session id is uuidv7; filename is <ISO>_<uuidv7>.jsonl (matches spec §1).",
+      "affects": "Task 9 (crash recovery), Task 5, Task 33 (replay fixtures)"
+    },
+    {
+      "topic": "session-file-format",
+      "finding": "First entry is a `session` header entry (type: 'session'); message entries follow as { type: 'message', message: { role, content }, id, parentId, timestamp }.",
+      "affects": "boundary parsing of transcript entries (later commits)"
+    }
+  ],
+  "notes": "Live end-to-end launch through a real model turn was not exercised (no provider API key configured in this environment). It is unnecessary for this gate: the native persistence path (SessionManager._persist -> openSync 'wx') is identical whether the assistant message originates from a live model or a synthetic append, so writing the transcript into the redirected dir is proven either way. A model-driven end-to-end run is covered later by acceptance/sc-2 (Task 5, Commit 3)."
+}
