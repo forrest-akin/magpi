@@ -14,7 +14,7 @@ For the exhaustive method list, see the API docs at <https://true-myth.js.org>.
 - Collections of `Result`s
 - Converting between the three types
 - Retries, delays, and timeouts
-- Parsing with `true-myth-zod`
+- Parsing with `parserFor`
 
 ## Creating values at the boundary
 
@@ -108,10 +108,11 @@ This belongs in the shell, around real IO. See
 <https://true-myth.js.org/guide/understanding/task/retries-and-delays.html> for
 the current API.
 
-## Parsing with `true-myth-zod`
+## Parsing with `parserFor`
 
-`parserFor(schema)` → `(input: unknown) => Result<T, ZodError>` for sync parses;
-`asyncParserFor(schema)` → `(input: unknown) => Task<T, ZodError>` for async (or
-schemas with async refinements). Both let you chain a parse straight onto a
-boundary `Task` with `.andThen(...)`. Peer deps: `true-myth >=9`, `zod >=3.25`,
-and the Zod v4 import path (`import * as z from 'zod/v4'`).
+`parserFor(schema)` (`src/parse.ts`) → `(input: unknown) => Result<T, ParseError>`
+over a plain zod 4 schema (`import * as z from 'zod'`), with
+`ParseError = { kind: 'ParseError', message, issues }`. Chain it onto a boundary
+`Task` with `.andThen((json) => task.fromResult(parse(json)))`. Dependencies:
+`true-myth` and `zod` v4.
+

@@ -1,10 +1,13 @@
+import type { WorkUnitRecord } from '../workunit/record';
+
 export type ShapeError =
   | { readonly kind: 'Usage'; readonly input: string }
   | { readonly kind: 'InvalidSlug'; readonly branch: string }
   | { readonly kind: 'NotARepository'; readonly cwd: string }
   | { readonly kind: 'CheckoutFailed'; readonly branch: string; readonly stderr: string }
   | { readonly kind: 'AlreadyExists'; readonly slug: string }
-  | { readonly kind: 'WriteFailed'; readonly path: string; readonly code: string };
+  | { readonly kind: 'WriteFailed'; readonly path: string; readonly code: string }
+  | { readonly kind: 'Corrupt'; readonly path: string; readonly detail: string };
 
 export type Unexpected = {
   readonly kind: 'Unexpected';
@@ -16,6 +19,12 @@ export type ShapeFailure = ShapeError | Unexpected;
 
 export type Outcome =
   | { readonly kind: 'Created'; readonly slug: string; readonly branch: string }
+  | {
+      readonly kind: 'Status';
+      readonly slug: string;
+      readonly state: WorkUnitRecord['state'];
+      readonly phase: WorkUnitRecord['phase'];
+    }
   | ShapeError;
 
 export type Notice = {
@@ -32,6 +41,11 @@ export const render = (outcome: Outcome): Notice => {
         message: `Work unit ${outcome.slug} created on branch ${outcome.branch}.`,
         level: 'info',
       };
+    case 'Status':
+      return {
+        message: `Work unit ${outcome.slug}: ${outcome.state} (${outcome.phase}).`,
+        level: 'info',
+      };
     case 'InvalidSlug':
       return { message: `Branch ${outcome.branch} gives an empty slug.`, level: 'error' };
     case 'NotARepository':
@@ -42,6 +56,8 @@ export const render = (outcome: Outcome): Notice => {
       return { message: `Work unit ${outcome.slug} already exists.`, level: 'warning' };
     case 'WriteFailed':
       return { message: `Could not write ${outcome.path}: ${outcome.code}`, level: 'error' };
+    case 'Corrupt':
+      return { message: `${outcome.path} is corrupt: ${outcome.detail}`, level: 'error' };
     default: {
       const unhandled: never = outcome;
       return unhandled;

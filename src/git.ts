@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import Maybe from 'true-myth/maybe';
 import type Task from 'true-myth/task';
 import * as task from 'true-myth/task';
 import type { ShapeFailure } from './shape/outcome';
@@ -30,3 +31,24 @@ export const checkout = (root: string, branch: string): Task<void, ShapeFailure>
       await run('git', ['switch', '--quiet', branch], { cwd: root });
     },
   );
+
+export const currentBranch = (root: string): Task<Maybe<string>, ShapeFailure> =>
+  task
+    .tryOrElse(
+      (cause) => cause,
+      async () =>
+        Maybe.just(
+          (
+            await run('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd: root })
+          ).stdout.trimEnd(),
+        ),
+    )
+    .orElse((cause) =>
+      isGitExit(cause) && cause.code === 1
+        ? task.resolve<Maybe<string>, ShapeFailure>(Maybe.nothing())
+        : task.reject<Maybe<string>, ShapeFailure>({
+            kind: 'Unexpected',
+            operation: 'currentBranch',
+            cause,
+          }),
+    );

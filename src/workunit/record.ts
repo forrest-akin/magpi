@@ -1,3 +1,6 @@
+import type { Result } from 'true-myth/result';
+import * as z from 'zod';
+import { type ParseError, parserFor } from '../parse';
 import type { Slug } from './slug';
 
 type Empty = Readonly<Record<string, never>>;
@@ -35,3 +38,19 @@ export const newWorkUnit = ({
   createdAt: now,
   updatedAt: now,
 });
+
+const workUnitSchema = z.object({
+  slug: z.string().transform((slug) => slug as Slug),
+  branch: z.string(),
+  state: z.literal('created'),
+  phase: z.literal('none'),
+  retryCount: z.literal(0),
+  artifacts: z.strictObject({}),
+  briefs: z.strictObject({}),
+  sessionFiles: z.tuple([]),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+}) satisfies z.ZodType<WorkUnitRecord>;
+
+export const parseWorkUnit: (input: unknown) => Result<WorkUnitRecord, ParseError> =
+  parserFor(workUnitSchema);

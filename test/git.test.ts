@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { just, nothing } from 'true-myth/maybe';
 import { err, ok } from 'true-myth/result';
-import { checkout, repoRoot } from '../src/git';
+import { checkout, currentBranch, repoRoot } from '../src/git';
 import { git, tempDir, tempRepo } from './support/repo';
 
 test('repoRoot finds the top level from a subdirectory', async () => {
@@ -43,5 +44,21 @@ test('checkout of a missing branch is CheckoutFailed with git stderr', async () 
 test('checkout from a root that does not exist is Unexpected', async () => {
   const missing = join(await tempDir(), 'gone');
   const result = await checkout(missing, 'main');
+  expect(result.isErr && result.error.kind).toBe('Unexpected');
+});
+
+test('currentBranch is the branch HEAD points at', async () => {
+  const root = await tempRepo();
+  expect(await currentBranch(root)).toEqual(ok(just('main')));
+});
+
+test('currentBranch on a detached HEAD is nothing', async () => {
+  const root = await tempRepo();
+  git(root, 'checkout', '--quiet', '--detach');
+  expect(await currentBranch(root)).toEqual(ok(nothing()));
+});
+
+test('currentBranch outside a repository is Unexpected', async () => {
+  const result = await currentBranch(await tempDir());
   expect(result.isErr && result.error.kind).toBe('Unexpected');
 });

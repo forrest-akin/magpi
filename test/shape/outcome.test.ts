@@ -17,6 +17,16 @@ test.each<[Outcome, string, Notice['level']]>([
     'Could not write /r/work.json: EACCES',
     'error',
   ],
+  [
+    { kind: 'Status', slug: 'feat-x', state: 'created', phase: 'none' },
+    'Work unit feat-x: created (none).',
+    'info',
+  ],
+  [
+    { kind: 'Corrupt', path: '/r/work.json', detail: 'state: bad' },
+    '/r/work.json is corrupt: state: bad',
+    'error',
+  ],
 ])('%o renders %p at %p', (outcome, message, level) => {
   expect(render(outcome)).toEqual({ message, level });
 });

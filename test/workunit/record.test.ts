@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { newWorkUnit } from '../../src/workunit/record';
+import { ok } from 'true-myth/result';
+import { newWorkUnit, parseWorkUnit } from '../../src/workunit/record';
 import type { Slug } from '../../src/workunit/slug';
 
 test('a new work unit is created with no phase and empty collections', () => {
@@ -17,4 +18,13 @@ test('a new work unit is created with no phase and empty collections', () => {
     createdAt: now,
     updatedAt: now,
   });
+});
+
+test('parseWorkUnit accepts a new work unit read back from JSON', () => {
+  const record = newWorkUnit({
+    slug: 'feat-x' as Slug,
+    branch: 'feat/x',
+    now: '2026-10-26T12:00:00.000Z',
+  });
+  expect(parseWorkUnit(JSON.parse(JSON.stringify(record)))).toEqual(ok(record));
 });

@@ -28,7 +28,7 @@ magpi is a pi package and runs inside pi ([ADR 0003](docs/adrs/0003-magpi-runs-i
 pi -e <path to magpi>
 ```
 
-In a git repository, `/shape --branch <branch>` checks out an existing branch and creates its work unit at `.magpi/work/<slug>/work.json`. It never overwrites an existing work unit. Other arguments print the usage.
+In a git repository, `/shape --branch <branch>` checks out an existing branch and creates its work unit at `.magpi/work/<slug>/work.json`, or reports the unit the branch already has. `/shape` with no arguments reports the work unit on the current branch. It never overwrites an existing work unit. Other arguments print the usage.
 
 ## Layout
 

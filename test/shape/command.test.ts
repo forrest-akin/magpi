@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { shape } from '../../src/shape/command';
 import { git, tempDir, tempRepo } from '../support/repo';
@@ -84,17 +84,19 @@ test('--branch naming a tracked file is CheckoutFailed and keeps its edits', asy
   expect(notices).toEqual([{ message: 'fatal: invalid reference: README.md', level: 'error' }]);
 });
 
-test('an existing work unit warns and leaves work.json untouched', async () => {
+test('--branch on an existing work unit checks it out and reports it, work.json untouched', async () => {
   const root = await tempRepo('feat/x');
   const workJson = join(root, '.magpi/work/feat-x/work.json');
   await shape('--branch feat/x', fakeCtx(root).ctx);
   const before = await readFile(workJson, 'utf8');
+  git(root, 'checkout', '--quiet', 'main');
   const { ctx, notices } = fakeCtx(root);
 
   await shape('--branch feat/x', ctx);
 
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('feat/x');
   expect(await readFile(workJson, 'utf8')).toBe(before);
-  expect(notices).toEqual([{ message: 'Work unit feat-x already exists.', level: 'warning' }]);
+  expect(notices).toEqual([{ message: 'Work unit feat-x: created (none).', level: 'info' }]);
 });
 
 test('an unexpected failure throws naming the operation and its cause', async () => {
@@ -107,4 +109,71 @@ test('an unexpected failure throws naming the operation and its cause', async ()
   expect(cause).toBeInstanceOf(Error);
   expect(message).toBe(`/shape: repoRoot: ${(cause as Error).message}`);
   expect(notices).toEqual([]);
+});
+
+test('no args report the work unit on the current branch', async () => {
+  const root = await tempRepo('feat/x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(notices).toEqual([{ message: 'Work unit feat-x: created (none).', level: 'info' }]);
+});
+
+const unitOnFeatX = async (): Promise<{ root: string; workJson: string }> => {
+  const root = await tempRepo('feat/x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  git(root, 'checkout', '--quiet', 'main');
+  return { root, workJson: join(root, '.magpi/work/feat-x/work.json') };
+};
+
+test('--branch on a work.json failing the schema notifies Corrupt and leaves HEAD', async () => {
+  const { root, workJson } = await unitOnFeatX();
+  const record = JSON.parse(await readFile(workJson, 'utf8'));
+  await writeFile(workJson, JSON.stringify({ ...record, state: 'bogus' }));
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('--branch feat/x', ctx);
+
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+  expect(notices).toEqual([
+    { message: `${workJson} is corrupt: state: Invalid input: expected "created"`, level: 'error' },
+  ]);
+});
+
+test('--branch on a work.json that is not JSON notifies Corrupt and leaves HEAD', async () => {
+  const { root, workJson } = await unitOnFeatX();
+  await writeFile(workJson, '{');
+  const detail = await Promise.resolve()
+    .then(() => JSON.parse('{'))
+    .catch((error: SyntaxError) => error.message);
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('--branch feat/x', ctx);
+
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+  expect(notices).toEqual([{ message: `${workJson} is corrupt: ${detail}`, level: 'error' }]);
+});
+
+test('--branch on an unreadable work.json throws naming readWorkUnit', async () => {
+  const { root, workJson } = await unitOnFeatX();
+  await chmod(workJson, 0o000);
+  const { ctx, notices } = fakeCtx(root);
+
+  const error = await shape('--branch feat/x', ctx).catch((e: unknown) => e);
+
+  expect((error as Error).message).toStartWith('/shape: readWorkUnit: EACCES');
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+  expect(notices).toEqual([]);
+});
+
+test('no args on a detached HEAD notify the usage', async () => {
+  const root = await tempRepo();
+  git(root, 'checkout', '--quiet', '--detach');
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(notices).toEqual([{ message: 'Usage: /shape --branch <branch>', level: 'error' }]);
 });

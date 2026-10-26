@@ -57,7 +57,8 @@ Only the **feature-specific bindings** live here:
   parser **lifts** it into the DU and the store **lowers** the DU back on write. Transitions are
   total and exhaustive.
 - **Parse-once boundary set.** Every on-disk artifact is untrusted input parsed **exactly once**
-  at the shell via `true-myth-zod` (`parserFor` → `Result`, `asyncParserFor` → `Task`):
+  at the shell via an in-repo `parserFor`/`asyncParserFor` (`boundary/parsers.ts`, over plain
+  `zod` + `true-myth`; `parserFor` → `Result`, `asyncParserFor` → `Task`):
   `work.json`, `*.json` briefs, `changeset.json`, `critique-todos.json`, each `ledger.jsonl`
   line. The core never re-validates.
 
@@ -89,7 +90,7 @@ src/
   ports/                       # INTERFACES the core needs from the world (typed; Task/Result/Maybe)
     clock.ts ids.ts file-system.ts git.ts work-store.ts ledger-store.ts
     session-launcher.ts subagent-runner.ts transcript-reader.ts prompter.ts
-  boundary/                    # PARSE-AT-THE-BOUNDARY — zod schemas + true-myth-zod parsers
+  boundary/                    # PARSE-AT-THE-BOUNDARY — zod schemas + in-repo Result/Task parsers
     schemas.ts parsers.ts      # work.json, brief, changeset, critique-todos, ledger; lift/lower DU
   adapters/                    # IMPERATIVE SHELL — concrete port impls (Bun IO)
     bun-clock.ts uuid-ids.ts bun-fs.ts git-cli.ts

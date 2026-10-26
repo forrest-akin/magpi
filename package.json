@@ -25,6 +25,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "true-myth": "^9"
+    "true-myth": "^9",
+    "zod": "^4"
   }
 }

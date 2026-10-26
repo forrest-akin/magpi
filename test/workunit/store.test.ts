@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { err, ok } from 'true-myth/result';
 import { newWorkUnit } from '../../src/workunit/record';
 import type { Slug } from '../../src/workunit/slug';
-import { createWorkUnit } from '../../src/workunit/store';
+import { createWorkUnit, readWorkUnit } from '../../src/workunit/store';
 import { tempDir } from '../support/repo';
 
 const record = newWorkUnit({
@@ -39,5 +39,51 @@ test('createWorkUnit with .magpi a regular file is WriteFailed naming work.json'
   await writeFile(join(root, '.magpi'), '');
   expect(await createWorkUnit(root, record)).toEqual(
     err({ kind: 'WriteFailed', path: join(root, '.magpi/work/feat-x/work.json'), code: 'ENOTDIR' }),
+  );
+});
+
+test('readWorkUnit finds a work unit createWorkUnit wrote', async () => {
+  const root = await tempDir();
+  await createWorkUnit(root, record);
+  expect(await readWorkUnit(root, record.slug)).toEqual(ok({ kind: 'Found', record }));
+});
+
+test('readWorkUnit with no unit folder is Missing', async () => {
+  expect(await readWorkUnit(await tempDir(), 'feat-x')).toEqual(ok({ kind: 'Missing' }));
+});
+
+test('readWorkUnit with a work.json failing the schema is Corrupt with the first issue', async () => {
+  const root = await tempDir();
+  const file = join(root, '.magpi/work/feat-x/work.json');
+  await createWorkUnit(root, record);
+  await writeFile(file, JSON.stringify({ ...record, state: 'bogus' }));
+  expect(await readWorkUnit(root, 'feat-x')).toEqual(
+    err({ kind: 'Corrupt', path: file, detail: 'state: Invalid input: expected "created"' }),
+  );
+});
+
+test('readWorkUnit with a work.json that is not JSON is Corrupt with the SyntaxError message', async () => {
+  const root = await tempDir();
+  const file = join(root, '.magpi/work/feat-x/work.json');
+  await createWorkUnit(root, record);
+  await writeFile(file, '{');
+  const detail = (() => {
+    try {
+      JSON.parse('{');
+    } catch (error) {
+      return (error as SyntaxError).message;
+    }
+    return '';
+  })();
+  expect(await readWorkUnit(root, 'feat-x')).toEqual(err({ kind: 'Corrupt', path: file, detail }));
+});
+
+test('readWorkUnit with a null work.json is Corrupt with the root issue unprefixed', async () => {
+  const root = await tempDir();
+  const file = join(root, '.magpi/work/feat-x/work.json');
+  await createWorkUnit(root, record);
+  await writeFile(file, 'null');
+  expect(await readWorkUnit(root, 'feat-x')).toEqual(
+    err({ kind: 'Corrupt', path: file, detail: 'Invalid input: expected object, received null' }),
   );
 });

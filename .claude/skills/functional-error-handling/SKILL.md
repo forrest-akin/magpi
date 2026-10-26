@@ -67,27 +67,21 @@ Validate untrusted input *once*, at the shell, and convert it into a parsed
 domain type. Pass that parsed value inward so the core can trust it and never
 re-checks.
 
-Use [`true-myth-zod`](https://github.com/true-myth/true-myth-zod) for the parse
-step: it turns a Zod schema directly into a parser that yields a true-myth type,
-so you skip the manual `safeParse`-then-branch dance. `parserFor(schema)`
-produces `(input: unknown) => Result<T, ZodError>`; `asyncParserFor(schema)`
-produces `(input: unknown) => Task<T, ZodError>`. It's first-party (same org as
-true-myth) but still early (v0.1.x), and it takes true-myth, zod, and itself as
-peer dependencies — install all three:
-
-```bash
-npm install true-myth zod true-myth-zod
-# requires true-myth >=9.0.0 and zod >=3.25.0
-```
+Use the in-repo `parserFor` (`src/parse.ts`) for the parse step. It wraps a
+plain zod 4 schema's `safeParse` and yields a true-myth `Result`, so there is no
+`safeParse`-then-branch at the call site. `parserFor(schema)` produces
+`(input: unknown) => Result<T, ParseError>`, where `ParseError` is
+`{ kind: 'ParseError', message, issues }`. The dependencies are `true-myth` and
+`zod` (v4).
 
 Sync parse (config, an already-in-hand request body):
 
 ```ts
-import { parserFor } from 'true-myth-zod';
-import * as z from 'zod/v4';
+import * as z from 'zod';
+import { parserFor } from './parse';
 
 const User = z.object({ id: z.string().uuid(), name: z.string().optional() });
-const parseUser = parserFor(User); // (input: unknown) => Result<User, ZodError>
+const parseUser = parserFor(User); // (input: unknown) => Result<User, ParseError>
 
 const outcome = parseUser(input).match({
   Ok: (user) => `parsed ${user.id}`,
@@ -95,24 +89,25 @@ const outcome = parseUser(input).match({
 });
 ```
 
-Async boundary — wrap the IO in a `Task`, then chain the parser with `andThen`:
+Async boundary: wrap the IO in a `Task`, then chain the parse with `andThen`,
+lifting the `Result` into the `Task`:
 
 ```ts
 // shell/users.ts — impure edge
 import * as task from 'true-myth/task';
-import { asyncParserFor } from 'true-myth-zod';
-import * as z from 'zod/v4';
+import * as z from 'zod';
+import { parserFor } from './parse';
 
 const Users = z.array(z.object({ id: z.string().uuid(), name: z.string() }));
-const parseUsers = asyncParserFor(Users); // (unknown) => Task<User[], ZodError>
+const parseUsers = parserFor(Users);
 
 export function fetchUsers() {
   return task
-          .tryOrElse(
-                  (e) => new Error('network error', { cause: e }),
-                  () => fetch('/api/users').then((res) => res.json()),
-          )
-          .andThen(parseUsers); // Task<User[], Error | ZodError>
+    .tryOrElse(
+      (e) => new Error('network error', { cause: e }),
+      () => fetch('/api/users').then((res) => res.json()),
+    )
+    .andThen((json) => task.fromResult(parseUsers(json))); // Task<User[], Error | ParseError>
 }
 ```
 
@@ -183,8 +178,7 @@ composing a pipeline where it genuinely reads better.
 - Do **not** model failures as bare strings or `Error` messages when callers need
   to branch on them; use a discriminated union.
 - Do **not** hand-roll `schema.safeParse(...)` plus `if (success)` branching at
-  the boundary; use `parserFor` / `asyncParserFor` so the parse yields a `Result`
-  or `Task` directly.
+  the boundary; use `parserFor` so the parse yields a `Result` directly.
 
 ## References
 
