@@ -328,9 +328,9 @@ any (except completed,
 
 #### State storage and mutation authority
 
-State is stored in `work.json` (`state` field + `phase` field). The **harness Node.js process** is the sole mutation authority. Pi sessions do not write to `work.json` directly. At session shutdown, the extension calls the harness's state-transition API (exposed as a local IPC socket or a CLI call) to advance state.
+State is stored in `work.json` (`state` field + `phase` field). The **magpi extension**, running in pi's process, is its only writer: its command handlers and its `session_shutdown` hook advance state directly. There is no outer process and no IPC.
 
-The harness writes `work.json` atomically: write to `work.json.tmp`, then `rename()`. On crash, an orphaned `.tmp` file is treated as if the transition did not complete (see crash recovery below).
+The extension writes `work.json` atomically: write to `work.json.tmp`, then `rename()`. On crash, an orphaned `.tmp` file is treated as if the transition did not complete (see crash recovery below).
 
 #### Human-driven vs. system-driven transitions
 
@@ -711,7 +711,7 @@ All Pi hook, SDK, and env-var names used by the harness are listed here with the
 | Hook name | When it fires | Magpi use |
 |---|---|---|
 | `session_start` | After session load, before first turn; carries `reason` and `previousSessionFile` | Inject the handoff brief for the incoming phase (read from `briefs/`); validate artifact paths; set `PI_CODING_AGENT_SESSION_DIR` context |
-| `session_shutdown` | Before session teardown | Write the outgoing handoff brief to `briefs/`; advance `work.json` state via harness IPC; write craft checkpoint git SHA to `work.json` |
+| `session_shutdown` | Before session teardown | Write the outgoing handoff brief to `briefs/`; advance `work.json` state; write craft checkpoint git SHA to `work.json` |
 | `before_agent_start` | Before the agent's first turn in a session | Prepend the handoff brief as a structured system-prompt block; inject model profile context |
 | `context` | Each turn, before the message array is sent to the model | Trim stale tool results; enforce the "lean active context" principle per §6.2 of `agent-harness-design.md`; drop entries the model no longer needs |
 | `session_before_compact` | When Pi is about to compact the session | Write a brief summarizing the session state to `sessions/pre-compact-<timestamp>.json`; optionally replace Pi's default summarizer with a cheaper model to reduce compaction cost |

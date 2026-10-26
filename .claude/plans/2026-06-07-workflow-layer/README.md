@@ -13,6 +13,8 @@ spike_path: docs/spikes/2026-06-07-pi-transcript-feasibility-spike.md
 
 # magpi workflow layer — shape / craft / reflect loop
 
+Its commit sequence is superseded by `.claude/plans/2026-10-26-redo-main.md`; its task specs remain the requirement inventory.
+
 ✨ Implement the three-umbrella workflow layer (`/shape` · `/craft` · `/reflect`) over a
 branch-linked work-unit folder, with under-the-hood handoffs and a transcript-mining
 `/distill` phase that makes the harness self-correcting — built as a **functional core

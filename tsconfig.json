@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    // Environment: pi loads src/ through jiti under Node; bun test runs the tests.
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["node"],
+
+    // Type-checking only: tsc never emits.
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    // Strict is the baseline; the extras below close the gaps the core relies on.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

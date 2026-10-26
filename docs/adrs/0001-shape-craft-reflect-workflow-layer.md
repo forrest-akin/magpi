@@ -1,6 +1,6 @@
 ---
 title: "Adopt the shape/craft/reflect workflow layer with branch-linked work-unit folders, under-the-hood handoffs, and a transcript-mining distill phase"
-status: Accepted
+status: Partly superseded by ADR 0003
 number: 1
 date: 2026-06-07
 ---
@@ -229,4 +229,6 @@ API. This is an explicitly accepted cost, not an oversight.
 
 ## Status
 
-Accepted (2026-06-07)
+Accepted (2026-06-07). [ADR 0003](0003-magpi-runs-inside-pi.md) supersedes decision 3's
+launch of each phase's pi with `PI_CODING_AGENT_SESSION_DIR`: magpi runs inside pi and launches
+no pi process.

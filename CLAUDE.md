@@ -45,4 +45,4 @@ A fuller annotated list lives in the `functional-error-handling` skill's
 
 ## Setup
 
-Setup is in [README.md](README.md).
+Setup and commands are in [README.md](README.md). `bun run verify` runs the tests and the type check.

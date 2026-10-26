@@ -1,6 +1,6 @@
 ---
 title: "Adopt Bun as the single-package toolchain (runtime, test runner, bundler) with tsc as the type authority"
-status: Accepted
+status: Partly superseded by ADR 0003
 number: 2
 date: 2026-06-07
 ---
@@ -85,4 +85,7 @@ carry over unchanged; only the runtime and test-runner adapters swap. Estimated 
 
 ## Status
 
-Accepted (2026-06-07).
+Accepted (2026-06-07). [ADR 0003](0003-magpi-runs-inside-pi.md) supersedes positions 1 (magpi runs
+in pi's Node process), 2 (tests run against real git and files in temp dirs, not port fakes and
+replay adapters), 3 (the gate is `bun run verify`, which type-checks `src/` and `test/` separately), 4 (runtime code uses `node:` built-ins) and 5 (Pi is a peer dependency, pinned
+exactly only as a dev dependency), and the bundler role (pi loads source through jiti).
