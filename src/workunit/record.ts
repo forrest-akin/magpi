@@ -44,16 +44,24 @@ export type CreatedRecord = WorkUnitRecord & { readonly state: 'created' };
 export const isCreated = (record: WorkUnitRecord): record is CreatedRecord =>
   record.state === 'created';
 
+export const addSession = (
+  record: WorkUnitRecord,
+  sessionFile: string,
+  now: string,
+): WorkUnitRecord => ({
+  ...record,
+  sessionFiles: [...record.sessionFiles, sessionFile],
+  updatedAt: now,
+});
+
 export const startShaping = (
   record: CreatedRecord,
   sessionFile: string,
   now: string,
 ): WorkUnitRecord => ({
-  ...record,
+  ...addSession(record, sessionFile, now),
   state: 'shaping',
   phase: 'explore',
-  sessionFiles: [...record.sessionFiles, sessionFile],
-  updatedAt: now,
 });
 
 export const sessionFileName = (nowIso: string, uuid: string): string =>
