@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { chmod, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { shape } from '../../src/shape/command';
 import { git, tempDir, tempRepo } from '../support/repo';
@@ -176,4 +176,58 @@ test('no args on a detached HEAD notify the usage', async () => {
   await shape('', ctx);
 
   expect(notices).toEqual([{ message: 'Usage: /shape --branch <branch>', level: 'error' }]);
+});
+
+test("--branch whose slug holds another branch's unit creates it at <slug>-<crc>", async () => {
+  const root = await tempRepo('feat/x', 'feat-x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('--branch feat-x', ctx);
+
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('feat-x');
+  const record = JSON.parse(
+    await readFile(join(root, '.magpi/work/feat-x-902b/work.json'), 'utf8'),
+  );
+  expect(record).toMatchObject({ slug: 'feat-x-902b', branch: 'feat-x' });
+  expect(notices).toEqual([
+    { message: 'Work unit feat-x-902b created on branch feat-x.', level: 'info' },
+  ]);
+});
+
+test("--branch when <slug> and <slug>-<crc> hold other branches' units is SlugTaken", async () => {
+  const root = await tempRepo('feat/x', 'feat-x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  git(root, 'checkout', '--quiet', 'main');
+  const record = JSON.parse(await readFile(join(root, '.magpi/work/feat-x/work.json'), 'utf8'));
+  const suffixedJson = join(root, '.magpi/work/feat-x-902b/work.json');
+  await mkdir(join(root, '.magpi/work/feat-x-902b'));
+  await writeFile(
+    suffixedJson,
+    JSON.stringify({ ...record, slug: 'feat-x-902b', branch: 'feat_x' }),
+  );
+  const before = await readFile(suffixedJson, 'utf8');
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('--branch feat-x', ctx);
+
+  expect(git(root, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+  expect(await readFile(suffixedJson, 'utf8')).toBe(before);
+  expect(notices).toEqual([
+    {
+      message: 'Work unit feat-x-902b belongs to branch feat_x; rename this branch to adopt it.',
+      level: 'error',
+    },
+  ]);
+});
+
+test('no args find the current branch unit at <slug>-<crc>', async () => {
+  const root = await tempRepo('feat/x', 'feat-x');
+  await shape('--branch feat/x', fakeCtx(root).ctx);
+  await shape('--branch feat-x', fakeCtx(root).ctx);
+  const { ctx, notices } = fakeCtx(root);
+
+  await shape('', ctx);
+
+  expect(notices).toEqual([{ message: 'Work unit feat-x-902b: created (none).', level: 'info' }]);
 });

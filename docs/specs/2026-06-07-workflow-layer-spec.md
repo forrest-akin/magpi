@@ -381,7 +381,7 @@ The slug algorithm is deterministic given the same input. The harness is the sou
 
 `/shape --branch <existing-branch>` skips slug derivation and branch creation:
 
-1. The slug is derived from the branch name itself: apply the same kebab-case normalization, but skip the crc suffix if the name is already unique within `.magpi/work/`.
+1. The slug is derived from the branch name itself with the same kebab-case normalization. If `.magpi/work/<slug>/` holds another branch's unit, the slug takes the suffix `-<crc>`: the first four of the eight zero-padded lowercase hex digits of `crc32(branch)`. If that folder also holds another branch's unit, `/shape` refuses with `SlugTaken`, since adopting cannot rename the branch as Error Handling 5's `-2` does.
 2. The harness checks out `<existing-branch>`.
 3. If `.magpi/work/<derived-slug>/` already exists and has a `work.json`, the harness treats this as **resume** (see below). Otherwise it creates a fresh work unit.
 

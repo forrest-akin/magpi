@@ -7,7 +7,8 @@ export type ShapeError =
   | { readonly kind: 'CheckoutFailed'; readonly branch: string; readonly stderr: string }
   | { readonly kind: 'AlreadyExists'; readonly slug: string }
   | { readonly kind: 'WriteFailed'; readonly path: string; readonly code: string }
-  | { readonly kind: 'Corrupt'; readonly path: string; readonly detail: string };
+  | { readonly kind: 'Corrupt'; readonly path: string; readonly detail: string }
+  | { readonly kind: 'SlugTaken'; readonly slug: string; readonly branch: string };
 
 export type Unexpected = {
   readonly kind: 'Unexpected';
@@ -58,6 +59,11 @@ export const render = (outcome: Outcome): Notice => {
       return { message: `Could not write ${outcome.path}: ${outcome.code}`, level: 'error' };
     case 'Corrupt':
       return { message: `${outcome.path} is corrupt: ${outcome.detail}`, level: 'error' };
+    case 'SlugTaken':
+      return {
+        message: `Work unit ${outcome.slug} belongs to branch ${outcome.branch}; rename this branch to adopt it.`,
+        level: 'error',
+      };
     default: {
       const unhandled: never = outcome;
       return unhandled;

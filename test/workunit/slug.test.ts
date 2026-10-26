@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { err, ok } from 'true-myth/result';
-import { type Slug, slugFromBranch } from '../../src/workunit/slug';
+import { type Slug, slugFromBranch, suffixedSlug } from '../../src/workunit/slug';
 
 test('feat/OAuth_login gives feat-oauth-login', () => {
   expect(slugFromBranch('feat/OAuth_login')).toEqual(ok('feat-oauth-login' as Slug));
@@ -16,4 +16,8 @@ test.each([
 
 test('a branch with nothing slug-safe is an invalid slug', () => {
   expect(slugFromBranch('!!')).toEqual(err({ kind: 'InvalidSlug', branch: '!!' }));
+});
+
+test('suffixedSlug appends the first four zero-padded hex digits of crc32(branch)', () => {
+  expect(suffixedSlug('b211' as Slug, 'b211')).toBe('b211-0007' as Slug);
 });

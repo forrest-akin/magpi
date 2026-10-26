@@ -27,6 +27,11 @@ test.each<[Outcome, string, Notice['level']]>([
     '/r/work.json is corrupt: state: bad',
     'error',
   ],
+  [
+    { kind: 'SlugTaken', slug: 'feat-x-a21d', branch: 'feat/y' },
+    'Work unit feat-x-a21d belongs to branch feat/y; rename this branch to adopt it.',
+    'error',
+  ],
 ])('%o renders %p at %p', (outcome, message, level) => {
   expect(render(outcome)).toEqual({ message, level });
 });
